@@ -1,0 +1,95 @@
+Victor Figueredo - CP - Oracle / PL-SQL
+
+/*Esse relatório tem como Base 3 formulários diferentes: 	1 - Admissão Psicologia 
+															2 - Evolução Psicologica 
+															3 - Anotações Psicologia
+															
+Tem como Objetivo informar o Risco Psicologico do Paciente que é respondido pelos psicólogos no momento da visita ao Leito do Paciente */
+
+SELECT
+    RCL_TXT,
+    RCL_DTHR,
+    PAC_REG,
+    PAC_NOME,
+    LOC_NOME,
+    RCL.RCL_CCIH_STR_COD,
+    STR_NOME,
+    PSV.PSV_APEL,
+    ROUND ( MONTHS_BETWEEN ( SYSDATE, PAC.PAC_NASC ) / 12, 0 ) as IDADE,
+    PAC.PAC_SEXO,
+    SUBSTR(SUBSTR(RCL.RCL_TXT,INSTR(RCL.RCL_TXT,'@#'|| '33812'|| '@'|| '1'|| '&',1,1) + 
+	 LENGTH('@#'|| '33812'|| '@'|| '1'|| '&'),1000),1,INSTR(SUBSTR(RCL.RCL_TXT,INSTR(RCL.RCL_TXT,'@#'|| '33812'|| '@'|| '1'|| '&',1,1) + 
+	 LENGTH('@#'|| '33812'|| '@'|| '1'|| '&'),1000),'@',1,1) - 1) AS DIRETRI,
+    HSP_DTHRA,
+   
+    (SELECT MIN(B.RCL_DTHR)
+       FROM RCL B
+       WHERE   B.RCL_PAC = RCL.RCL_PAC
+         AND   B.RCL_HSP = RCL.RCL_HSP
+         AND   B.RCL_COD IN ('ADMPSIC','EVPSICOL','ANOTPSI')
+	   	AND   B.RCL_STAT NOT IN ('A','C')
+         AND   B.RCL_DTHR > RCL.RCL_DTHR) AS PRIMEIRA_EVOL, SMK.smk_rot, STR_NOME,
+         
+       DECODE(  (SELECT REPLACE (SMART.F_RESULTADO_RCL_2(R.RCL_TXT, 46222, 38),'?') FROM RCL R  
+                                                                           WHERE R.RCL_PAC = HSP.HSP_PAC 
+                                                                             AND R.RCL_HSP = HSP.HSP_NUM
+                                                                             AND R.RCL_COD in ( 'SCIH', 'AVARICOV')
+                                                                             AND ( R.RCL_STAT NOT IN ('C','X') ) 
+                                                                             AND R.RCL_DTHR = (SELECT MAX(RR.RCL_DTHR) FROM RCL RR 
+                                                                                                                      WHERE RR.RCL_PAC = R.RCL_PAC  
+                                                                                                                        AND RR.RCL_HSP = R.RCL_HSP 
+                                                                                                                        AND RR.RCL_COD in ( 'SCIH', 'AVARICOV')
+                                                                                                                        AND RR.RCL_STAT NOT IN ('C','X') )),
+        'Alteração de comport','Alteração de comportamento exacerbada (pensamento recorrente de perseguição,delírio e agitação psicomotora).',
+        'Alteração de humor s','Alteração de humor significativa ( não compatível com contexto vivenciado) diante diagnóstico, prognóstico reservado e realização de procedimentos invasivos.',
+        'Paciente com tentati','Paciente com tentativa de suicídio e/ou ideação suicida.',
+        'Transtorno mental de','Transtorno mental descompensado.',
+        'Recusa ou falta de c','Recusa ou falta de colaboração no tratamento / má adesão que apresente risco para descompensação.',
+        'Pacientes em Cuidado','Pacientes em Cuidados Paliativos em fase ativa de morte.',
+        'Familiares com exace','Familiares com exacerbação de sintomas emocionais.',
+        'Pacientes em pré-ope','Pacientes em pré-operatório de cirurgia cardíaca',
+        'Sintomas de ansiedad','Sintomas de ansiedade exacerbada e/ou depressivos (tristeza significativa, irritabilidade,preocupações excessivas, agitação psicomotora, medo, hostilidade e apatia).',
+        'Paciente em pré-oper','Paciente em pré-operatório de transplante',(SELECT REPLACE (SMART.F_RESULTADO_RCL_2(R.RCL_TXT, 46222, 38),'?') FROM RCL R  
+                                                                           WHERE R.RCL_PAC = HSP.HSP_PAC 
+                                                                             AND R.RCL_HSP = HSP.HSP_NUM
+                                                                             AND R.RCL_COD in ( 'SCIH', 'AVARICOV')
+                                                                             AND ( R.RCL_STAT NOT IN ('C','X') ) 
+                                                                             AND R.RCL_DTHR = (SELECT MAX(RR.RCL_DTHR) FROM RCL RR 
+                                                                                                                      WHERE RR.RCL_PAC = R.RCL_PAC  
+                                                                                                                        AND RR.RCL_HSP = R.RCL_HSP 
+                                                                                                                        AND RR.RCL_COD in ( 'SCIH', 'AVARICOV')
+                                                                                                                        AND RR.RCL_STAT NOT IN ('C','X') ))) RISCO_PSICOLOGICO 
+                                                                                                                        
+                                                                                                                              
+FROM RCL INNER JOIN PAC 
+                 ON PAC_REG = RCL_PAC
+    
+         INNER JOIN HSP 
+                 ON RCL_PAC = HSP.HSP_PAC
+                AND RCL_HSP = HSP.HSP_NUM
+                      
+         INNER JOIN LOC 
+                 ON LOC_COD = HSP.HSP_LOC
+    
+        INNER JOIN STR
+                ON LOC_STR = STR_COD
+                
+        LEFT JOIN PSV 
+               ON RCL_MED = PSV_COD
+
+		  INNER JOIN SMK
+                ON  HSP.HSP_SMK_TIPO = SMK.SMK_TIPO
+               AND  HSP.HSP_PROC1 = SMK.SMK_COD
+  
+               
+WHERE   RCL_COD in ( 'SCIH', 'AVARICOV')
+  AND   HSP_TRAT_INT = 'I'
+  AND   RCL_STAT NOT IN ('C','A')
+  AND   RCL_DTHR BETWEEN :DATA_INICIAL AND :DATA_FINAL
+  AND   ((CASE WHEN INSTR(RCL_TXT,'33812') > 0 THEN SUBSTR(SUBSTR(RCL.RCL_TXT,INSTR(RCL.RCL_TXT,'@#'|| '33812'|| '@'|| '1'|| '&',1,1) + 
+        LENGTH('@#'|| '33812'|| '@'|| '1'|| '&'),1000),1,INSTR(SUBSTR(RCL.RCL_TXT,INSTR(RCL.RCL_TXT,'@#'|| '33812'|| '@'|| '1'|| '&',1,1) + 
+        LENGTH('@#'|| '33812'|| '@'|| '1'|| '&'),1000),'@',1,1) - 1)ELSE 'Não'END  = 'Sim'  )
+        
+        OR (CASE WHEN INSTR(RCL_TXT,'46221') > 0 THEN SUBSTR(SUBSTR(RCL.RCL_TXT,INSTR(RCL.RCL_TXT,'@#'|| '46221'|| '@'|| '1'|| '&',1,1) + 
+        LENGTH('@#'|| '46221'|| '@'|| '1'|| '&'),1000),1,INSTR(SUBSTR(RCL.RCL_TXT,INSTR(RCL.RCL_TXT,'@#'|| '46221'|| '@'|| '1'|| '&',1,1) + 
+        LENGTH('@#'|| '46221'|| '@'|| '1'|| '&'),1000),'@',1,1) - 1)ELSE 'Não'END  = 'Sim'  ) )  
